@@ -1,0 +1,286 @@
+{
+  "pack_id": "harp",
+  "pack_version": "0.1.0",
+  "min_jetpacs_api": "1.5.0",
+  "feature": "harp",
+  "depends": [
+    {
+      "name": "org",
+      "min_version": "9.6"
+    },
+    {
+      "name": "cl-lib",
+      "min_version": "1.0"
+    }
+  ],
+  "layouts": [],
+  "sources": [],
+  "actions": [
+    {
+      "action": "harp.demo.setup",
+      "doc": "Write (or refresh) the bundled sample profiles and open the first."
+    },
+    {
+      "action": "harp.export.cancel",
+      "doc": "Dismiss the export chooser."
+    },
+    {
+      "action": "harp.export.open",
+      "doc": "Open the export format chooser."
+    },
+    {
+      "action": "harp.export.run",
+      "doc": "Export the current profile in the given format (org shares, html saves).",
+      "args": [
+        {
+          "name": "format",
+          "type": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "action": "harp.filter.clear",
+      "doc": "Clear the active view's tag filter."
+    },
+    {
+      "action": "harp.filter.tag",
+      "doc": "Toggle the active view's tag filter.",
+      "args": [
+        {
+          "name": "tag",
+          "type": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "action": "harp.form.cancel",
+      "doc": "Close the capture/edit form without saving."
+    },
+    {
+      "action": "harp.form.open",
+      "doc": "Open the capture/edit form for a kind (optionally an item id to edit).",
+      "args": [
+        {
+          "name": "kind",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "id",
+          "type": "text",
+          "required": false
+        }
+      ]
+    },
+    {
+      "action": "harp.form.save",
+      "doc": "Persist the open capture/edit form."
+    },
+    {
+      "action": "harp.form.set",
+      "doc": "Update one form field (picker/switch/enum) from the wire.",
+      "args": [
+        {
+          "name": "field",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "value",
+          "type": "text",
+          "required": false
+        }
+      ]
+    },
+    {
+      "action": "harp.journal.select",
+      "doc": "Select which journal to show.",
+      "args": [
+        {
+          "name": "name",
+          "type": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "action": "harp.med.back",
+      "doc": "Close the medication detail view."
+    },
+    {
+      "action": "harp.med.delete",
+      "doc": "Delete a medication (with confirmation).",
+      "args": [
+        {
+          "name": "id",
+          "type": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "action": "harp.med.form.cancel",
+      "doc": "Close the medication form without saving."
+    },
+    {
+      "action": "harp.med.form.open",
+      "doc": "Open the add/edit medication form (optional id to edit).",
+      "args": [
+        {
+          "name": "id",
+          "type": "text",
+          "required": false
+        }
+      ]
+    },
+    {
+      "action": "harp.med.form.save",
+      "doc": "Persist the medication form."
+    },
+    {
+      "action": "harp.med.form.set",
+      "doc": "Update a medication-form picker/switch field.",
+      "args": [
+        {
+          "name": "field",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "value",
+          "type": "text",
+          "required": false
+        }
+      ]
+    },
+    {
+      "action": "harp.med.refill",
+      "doc": "Add a medication's refill size to its stock.",
+      "args": [
+        {
+          "name": "id",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "file",
+          "type": "text",
+          "required": false
+        }
+      ]
+    },
+    {
+      "action": "harp.med.skipped",
+      "doc": "Log a medication dose as skipped.",
+      "args": [
+        {
+          "name": "id",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "amount",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "unit",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "file",
+          "type": "text",
+          "required": false
+        }
+      ]
+    },
+    {
+      "action": "harp.med.snooze",
+      "doc": "Snooze a due-dose notification.",
+      "args": [
+        {
+          "name": "id",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "time",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "amount",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "unit",
+          "type": "text",
+          "required": false
+        }
+      ]
+    },
+    {
+      "action": "harp.med.taken",
+      "doc": "Log a medication dose as taken (decrements stock).",
+      "args": [
+        {
+          "name": "id",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "amount",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "unit",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "file",
+          "type": "text",
+          "required": false
+        }
+      ]
+    },
+    {
+      "action": "harp.med.tap",
+      "doc": "Open a medication's detail view.",
+      "args": [
+        {
+          "name": "id",
+          "type": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "action": "harp.profile.open",
+      "doc": "Open a discovered profile by file path.",
+      "args": [
+        {
+          "name": "file",
+          "type": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "action": "harp.reminders.month",
+      "doc": "Show a different month on the reminders calendar.",
+      "args": [
+        {
+          "name": "value",
+          "type": "text",
+          "required": true
+        }
+      ]
+    }
+  ]
+}

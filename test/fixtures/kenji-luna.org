@@ -1,0 +1,103 @@
+:PROPERTIES:
+:ID: e8f2c0ad-6a2c-4f97-9ad0-0d9555550005
+:HARP_NAME: Kenji and Luna
+:HARP_TYPE: cat
+:END:
+#+TITLE: Kenji and Luna Household Record
+
+* Metadata
+** Sources
+
+** Metrics
+*** Weight    :household:
+:PROPERTIES:
+:TAG_ID: weight
+:UNIT: kg
+:RANGE: 1-10
+:HEALTHY_RANGE: 2.8-5.8
+:END:
+
+*** Water Intake    :hydration:
+:PROPERTIES:
+:TAG_ID: water
+:UNIT: ml
+:RANGE: 0-500
+:HEALTHY_RANGE: 140-320
+:END:
+
+*** Activity Minutes    :play:
+:PROPERTIES:
+:TAG_ID: active
+:UNIT: min
+:RANGE: 0-240
+:HEALTHY_RANGE: 20-90
+:END:
+
+* Journals
+** Shared Routine
+*** Entry    :ATTACH:
+:PROPERTIES:
+:ID: ddd8aa8a-9d9a-4d22-a3b8-900500000001
+:DATETIME: <2026-01-02 08:15>
+:PRIVATE: nil
+:END:
+
+Both cats used new fountain #water(280) #active(35)
+Morning photo [[attachment:fountain-morning.jpg]]
+
+*** Entry
+:PROPERTIES:
+:ID: ddd8aa8a-9d9a-4d22-a3b8-900500000002
+:DATETIME: <2026-01-06 21:00>
+:PRIVATE: nil
+:END:
+
+Evening play with feather toy #active(42)
+
+*** Entry    :ATTACH:
+:PROPERTIES:
+:ID: ddd8aa8a-9d9a-4d22-a3b8-900500000003
+:DATETIME: <2026-01-09 09:40>
+:PRIVATE: nil
+:END:
+
+Weight check after grooming #weight(4.9)
+Scale snapshot [[attachment:scale-reading.png]]
+
+* Documents
+** Dental Cleaning Advice    :ATTACH:dental:
+:PROPERTIES:
+:SOURCE: Midtown Animal Care
+:FILES: dental-note.pdf, tooth-chart.jpg
+:ID: eee1e15a-4ccc-4e23-9c00-900500000001
+:DATETIME: <2026-01-09 12:30>
+:PRIVATE: nil
+:END:
+
+Recommend brushing 3 times a week.
+
+** Food Rotation Plan    :ATTACH:
+:PROPERTIES:
+:SOURCE: Midtown Animal Care
+:FILES: food-rotation-plan.pdf
+:ID: eee1e15a-4ccc-4e23-9c00-900500000002
+:DATETIME: <2026-01-10 10:00>
+:PRIVATE: nil
+:END:
+
+Switch proteins every two weeks.
+
+* Reminders
+** TODO Replace Water Filter    :hydration:
+SCHEDULED: <2026-02-01 +1m>
+:PROPERTIES:
+:ID: fff5b1e5-3b6f-4d7e-8461-900500000001
+:END:
+Replace fountain filter and sanitize tank.
+
+** TODO Dental Brushing Cycle    :dental:
+SCHEDULED: <2026-01-20 +1w>
+:PROPERTIES:
+:ID: fff5b1e5-3b6f-4d7e-8461-900500000002
+:END:
+Track compliance for both cats.

@@ -1,0 +1,135 @@
+:PROPERTIES:
+:ID: b8f2c0ad-6a2c-4f97-9ad0-0d9222220002
+:HARP_NAME: Diego Alvarez
+:HARP_TYPE: human
+:END:
+#+TITLE: Diego Recovery Notes
+
+* Metadata
+** Sources
+
+** Metrics
+*** Heart Rate    :cardio:
+:PROPERTIES:
+:TAG_ID: hr
+:UNIT: bpm
+:RANGE: 35-220
+:HEALTHY_RANGE: 55-95
+:END:
+
+*** Systolic BP    :cardio:
+:PROPERTIES:
+:TAG_ID: sbp
+:UNIT: mmHg
+:RANGE: 70-220
+:HEALTHY_RANGE: 95-125
+:END:
+
+*** Pain Scale    :rehab:
+:PROPERTIES:
+:TAG_ID: pain
+:UNIT: score
+:RANGE: 0-10
+:HEALTHY_RANGE: 0-2
+:END:
+
+* Journals
+** Rehab
+*** Entry    :physio:ATTACH:
+:PROPERTIES:
+:ID: 44f11210-a050-4d1b-8aa1-900200000001
+:DATETIME: <2026-01-03 08:20>
+:PRIVATE: nil
+:END:
+
+Knee mobility session #pain(4) #hr(102)
+Video for gait review [[attachment:gait-session.mp4]]
+
+*** Entry
+:PROPERTIES:
+:ID: 44f11210-a050-4d1b-8aa1-900200000002
+:DATETIME: <2026-01-10 08:10>
+:PRIVATE: nil
+:END:
+
+Lower pain with better balance #pain(2) #sbp(122)
+
+** Travel
+*** Entry    :ATTACH:
+:PROPERTIES:
+:ID: 44f11210-a050-4d1b-8aa1-900200000003
+:DATETIME: <2026-01-11 18:40>
+:PRIVATE: nil
+:END:
+
+Carried meds and support brace [[attachment:trip-kit.jpg]] #routine
+
+* Documents
+** MRI Report    :ATTACH:imaging:
+:PROPERTIES:
+:SOURCE: Centro Medico Norte
+:FILES: knee-mri-summary.pdf, knee-mri-slice-1.png
+:ID: 55cc914a-4889-4f62-98c4-900200000001
+:DATETIME: <2025-12-29 11:15>
+:PRIVATE: nil
+:END:
+
+Consultant notes meniscus inflammation.
+
+** Insurance Approval    :ATTACH:admin:
+:PROPERTIES:
+:SOURCE: Seguro Vida
+:FILES: approval-letter.pdf
+:ID: 55cc914a-4889-4f62-98c4-900200000002
+:DATETIME: <2026-01-04 12:00>
+:PRIVATE: nil
+:END:
+
+Approved 8 physio sessions.
+
+* Reminders
+** TODO Stretch Session    :rehab:
+SCHEDULED: <2026-02-02 +2d>
+:PROPERTIES:
+:ID: 66fbe8a2-5ec3-4ff8-b990-900200000001
+:END:
+Maintain quadriceps and hamstrings routine.
+
+** TODO Renew Brace    :admin:
+DEADLINE: <2026-04-15>
+:PROPERTIES:
+:ID: 66fbe8a2-5ec3-4ff8-b990-900200000002
+:END:
+Order replacement knee brace before travel.
+
+* Medications
+** Ibuprofen    :pain:
+:PROPERTIES:
+:ID: 77a1b2c3-0000-4000-8000-900200000001
+:HARP_MED: t
+:UNIT: tab
+:STOCK: 24
+:LOW_STOCK: 6
+:ACTIVE: t
+:END:
+Take with food for knee pain.
+*** Schedule
+:PROPERTIES:
+:AMOUNT: 1
+:TIMES: 08:00, 20:00
+:END:
+
+** Vitamin D    :supplement:
+:PROPERTIES:
+:ID: 77a1b2c3-0000-4000-8000-900200000002
+:HARP_MED: t
+:UNIT: tab
+:STOCK: 90
+:ACTIVE: t
+:END:
+*** Schedule
+:PROPERTIES:
+:AMOUNT: 1
+:TIMES: 09:00
+:DAYS: Mon Wed Fri
+:END:

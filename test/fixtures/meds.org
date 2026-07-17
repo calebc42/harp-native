@@ -1,0 +1,112 @@
+:PROPERTIES:
+:ID: c0ffee00-0000-4000-8000-00000000med1
+:HARP_NAME: Med Test
+:HARP_TYPE: human
+:END:
+#+TITLE: Medication Test Profile
+
+* Metadata
+** Sources
+
+** Metrics
+
+* Journals
+** Main
+
+* Documents
+
+* Medications
+** Ibuprofen    :pain:
+:PROPERTIES:
+:ID: 11111111-0000-4000-8000-000000000001
+:HARP_MED: t
+:UNIT: tab
+:STOCK: 30
+:REFILL: 30
+:LOW_STOCK: 5
+:EXPIRES: <2099-12-01>
+:ACTIVE: t
+:END:
+:LOGBOOK:
+- taken [2026-07-14 08:05] 1 tab
+- skipped [2026-07-13 20:00]
+:END:
+Take with food.
+*** Schedule
+:PROPERTIES:
+:AMOUNT: 1
+:TIMES: 08:00, 20:00
+:DAYS: Mon Tue Wed Thu Fri
+:END:
+
+** Levonorgestrel    :contraception:
+:PROPERTIES:
+:ID: 22222222-0000-4000-8000-000000000002
+:HARP_MED: t
+:UNIT: tab
+:STOCK: 84
+:LOW_STOCK: 7
+:ACTIVE: t
+:END:
+*** Schedule
+:PROPERTIES:
+:AMOUNT: 1
+:TIMES: 09:00
+:CYCLE_START: <2026-01-01>
+:ACTIVE_DAYS: 21
+:PAUSE_DAYS: 7
+:END:
+
+** Amoxicillin    :antibiotic:
+:PROPERTIES:
+:ID: 33333333-0000-4000-8000-000000000003
+:HARP_MED: t
+:UNIT: cap
+:STOCK: 21
+:ACTIVE: t
+:END:
+*** Schedule
+:PROPERTIES:
+:AMOUNT: 1
+:INTERVAL: 8h
+:WINDOW: 08:00-22:00
+:END:
+
+** Prednisone    :taper:
+:PROPERTIES:
+:ID: 44444444-0000-4000-8000-000000000004
+:HARP_MED: t
+:UNIT: tab
+:STOCK: 42
+:ACTIVE: t
+:END:
+*** Schedule
+:PROPERTIES:
+:AMOUNT: 4
+:TIMES: 08:00
+:FROM: <2026-07-01>
+:UNTIL: <2026-07-07>
+:END:
+*** Schedule
+:PROPERTIES:
+:AMOUNT: 2
+:TIMES: 08:00
+:FROM: <2026-07-08>
+:UNTIL: <2026-07-14>
+:END:
+
+** Old Vitamin    :supplement:
+:PROPERTIES:
+:ID: 55555555-0000-4000-8000-000000000005
+:HARP_MED: t
+:UNIT: tab
+:STOCK: 3
+:LOW_STOCK: 10
+:EXPIRES: <2020-01-01>
+:ACTIVE: no
+:END:
+*** Schedule
+:PROPERTIES:
+:AMOUNT: 1
+:TIMES: 12:00
+:END:

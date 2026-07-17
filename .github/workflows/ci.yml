@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  elisp:
+    name: Elisp (ERT + bundle freshness)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The Jetpacs core is the `jetpacs' submodule; the suite loads it.
+          submodules: recursive
+
+      - uses: purcell/setup-emacs@master
+        with:
+          version: "30.1"
+
+      - name: Harp ERT suite (against the submodule core)
+        run: ./test/run-tests.sh
+
+      # harp.el and harp-pack.json are generated; a PR that edits emacs/
+      # sources must ship them regenerated.
+      - name: Bundle and pack are current
+        run: |
+          emacs --batch -l emacs/build-demo.el
+          emacs --batch -l emacs/build-bundle.el
+          emacs --batch -l emacs/build-pack.el
+          git diff --exit-code emacs/apps/harp/harp-demo.el harp.el harp-pack.json

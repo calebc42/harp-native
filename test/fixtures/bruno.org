@@ -1,0 +1,103 @@
+:PROPERTIES:
+:ID: d8f2c0ad-6a2c-4f97-9ad0-0d9444440004
+:HARP_NAME: Bruno Oliveira
+:HARP_TYPE: dog
+:END:
+#+TITLE: Bruno Dog Health Record
+
+* Metadata
+** Sources
+
+** Metrics
+*** Weight    :canine:
+:PROPERTIES:
+:TAG_ID: weight
+:UNIT: kg
+:RANGE: 2-60
+:HEALTHY_RANGE: 18-32
+:END:
+
+*** Resting Pulse    :cardio:
+:PROPERTIES:
+:TAG_ID: pulse
+:UNIT: bpm
+:RANGE: 40-220
+:HEALTHY_RANGE: 60-120
+:END:
+
+*** Scratch Severity    :skin:
+:PROPERTIES:
+:TAG_ID: itch
+:UNIT: score
+:RANGE: 0-10
+:HEALTHY_RANGE: 0-3
+:END:
+
+* Journals
+** Walks
+*** Entry    :ATTACH:
+:PROPERTIES:
+:ID: aaf9ee2a-9ed8-4f3b-8db9-900400000001
+:DATETIME: <2026-01-04 06:55>
+:PRIVATE: nil
+:END:
+
+Energetic walk with no limping #weight(24.5) #pulse(88)
+Trail photo [[attachment:park-run.jpg]]
+
+*** Entry
+:PROPERTIES:
+:ID: aaf9ee2a-9ed8-4f3b-8db9-900400000002
+:DATETIME: <2026-01-07 19:35>
+:PRIVATE: nil
+:END:
+
+Mild itching today #itch(4)
+
+** Treatment
+*** Entry    :ATTACH:
+:PROPERTIES:
+:ID: aaf9ee2a-9ed8-4f3b-8db9-900400000003
+:DATETIME: <2026-01-08 20:10>
+:PRIVATE: nil
+:END:
+
+Topical ointment applied [[attachment:ointment-box.png]] #itch(2)
+
+* Documents
+** Skin Panel Results    :ATTACH:lab:
+:PROPERTIES:
+:SOURCE: Rio Pet Diagnostics
+:FILES: skin-panel.pdf, allergen-chart.png
+:ID: bb2243e1-24d2-4f57-a7ad-900400000001
+:DATETIME: <2026-01-08 12:45>
+:PRIVATE: nil
+:END:
+
+No critical allergy markers.
+
+** Vaccination Passport    :ATTACH:
+:PROPERTIES:
+:SOURCE: Rio Pet Clinic
+:FILES: passport-page-1.jpg, passport-page-2.jpg
+:ID: bb2243e1-24d2-4f57-a7ad-900400000002
+:DATETIME: <2026-01-01 10:15>
+:PRIVATE: nil
+:END:
+
+Rabies and DHPP current.
+
+* Reminders
+** TODO Tick Prevention    :preventive:
+SCHEDULED: <2026-02-05 +1m>
+:PROPERTIES:
+:ID: cc9c9f70-6f4f-4dc7-8ac4-900400000001
+:END:
+Apply spot-on treatment.
+
+** TODO Grooming Session    :grooming:
+DEADLINE: <2026-02-20>
+:PROPERTIES:
+:ID: cc9c9f70-6f4f-4dc7-8ac4-900400000002
+:END:
+Book grooming with regular partner.
