@@ -1,5 +1,6 @@
 ;;; harp-med.el --- Harp medications domain layer -*- lexical-binding: t; -*-
-
+;; Package-Requires: ((emacs "30.1"))
+;;; Commentary:
 ;; Accessors and predicates over the `medications' of a parsed Harp profile
 ;; (the `* Medications' section, read in `harp-profile.el').  A medication is
 ;; an alist: id, name, unit, stock, refill, low-stock, expires, active, notes,
@@ -13,7 +14,7 @@
 
 (require 'cl-lib)
 (require 'harp-profile)
-(require 'harp-ui)
+(require 'harp-state)
 
 (defun harp-med-medications (&optional profile)
   "Medications of PROFILE (default: the current profile)."
@@ -62,18 +63,6 @@ Half a tablet of stock must not read as a whole one — round is wrong here."
         (list (when (harp-med-expired-p med) "Expired")
               (cond ((harp-med-out-of-stock-p med) "Out of stock")
                     ((harp-med-low-stock-p med) "Low stock")))))
-
-(defun harp-med-dose-dedupe-key (state med time)
-  "The offline-queue dedupe key for a STATE tap on MED's TIME dose today.
-One key per med/dose/day: a double-tap queued offline must replay once —
-a second replay would double the LOGBOOK line and the stock decrement.
-The date is the RENDER day (baked into the action).  Residual limitation:
-a surface cached unrendered for >24h and tapped on two different real days
-shares one key, so the companion keeps only the last — acceptable because
-any app interaction re-renders the surface with the new day's key, and the
-alternative (a date-less key) would collapse every day's dose into one."
-  (format "harp.med.%s/%s/%s/%s" state (alist-get 'id med)
-          (format-time-string "%Y-%m-%d") (or time "-")))
 
 ;; ─── dose events ─────────────────────────────────────────────────────────────
 

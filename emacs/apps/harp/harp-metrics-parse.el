@@ -1,5 +1,6 @@
 ;;; harp-metrics-parse.el --- Inline #metric(value)/#tag and range parsing -*- lexical-binding: t; -*-
-
+;; Package-Requires: ((emacs "30.1"))
+;;; Commentary:
 ;; The one Harp-specific micro-parser.  Harp entry and document bodies carry
 ;; two inline tokens borrowed from harp-kmp's org dialect:
 ;;
@@ -53,7 +54,7 @@ first-seen order (mirroring harp-kmp); tags are de-duplicated."
       (string-to-number s))))
 
 (defun harp-parse-range (str)
-  "Parse a RANGE / HEALTHY_RANGE string \"lo-hi\" into a cons (LO . HI).
+  "Parse RANGE / HEALTHY_RANGE string STR \"lo-hi\" into a cons (LO . HI).
 Either bound may be nil.  Mirrors harp-kmp: split on \"-\" into exactly two
 parts, otherwise (nil . nil)."
   (if (not (stringp str))

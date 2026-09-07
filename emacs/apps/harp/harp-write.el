@@ -1,5 +1,6 @@
 ;;; harp-write.el --- Harp mutation layer -*- lexical-binding: t; -*-
-
+;; Package-Requires: ((emacs "30.1"))
+;;; Commentary:
 ;; Every write path into a profile Org file: add/replace a journal entry, a
 ;; document, or a metric definition; toggle an item's privacy; create a new
 ;; profile from the template.  Pure buffer edits under the profile file, each
@@ -17,9 +18,9 @@
 (require 'org-id)
 (require 'cl-lib)
 (require 'subr-x)
-(require 'jetpacs-org)
+(require 'ebp-org)
 (require 'harp-profile)
-(require 'harp-ui)
+(require 'harp-state)
 
 (defun harp-write--buffer ()
   "The live buffer for the current profile file (error when none open)."
@@ -65,7 +66,7 @@ otherwise become a real heading and re-parent every sibling below it."
 ;; ─── text builders (mirror harp-kmp's formatString) ─────────────────────────
 
 (defun harp-write--entry-text (id datetime tags private body)
-  "Org text for a `*** Entry' subtree."
+  "Build an entry with ID, DATETIME, TAGS, PRIVATE flag and BODY."
   (concat
    (format "*** Entry%s\n" (harp-write--tag-suffix tags))
    ":PROPERTIES:\n"
@@ -78,7 +79,8 @@ otherwise become a real heading and re-parent every sibling below it."
      "")))
 
 (defun harp-write--document-text (id name datetime source files tags private annotation)
-  "Org text for a `** Document' subtree."
+  "Build document ID with NAME, DATETIME, SOURCE, FILES and TAGS.
+PRIVATE controls visibility; ANNOTATION is the body."
   (concat
    (format "** %s%s\n" name (harp-write--tag-suffix tags))
    ":PROPERTIES:\n"
@@ -93,7 +95,7 @@ otherwise become a real heading and re-parent every sibling below it."
      "")))
 
 (defun harp-write--metric-text (name tag-id unit range healthy tags)
-  "Org text for a `*** Metric' definition subtree."
+  "Build metric NAME with TAG-ID, UNIT, RANGE, HEALTHY range and TAGS."
   (concat
    (format "*** %s%s\n" name (harp-write--tag-suffix tags))
    ":PROPERTIES:\n"
@@ -225,7 +227,7 @@ the buffer."
       (concat "*** Schedule\n:PROPERTIES:\n" props ":END:\n"))))
 
 (defun harp-write--medication-text (id fields &optional logbook)
-  "Org text for a `** Medication' subtree from FIELDS.
+  "Build medication ID from FIELDS.
 LOGBOOK, when non-nil, is a raw drawer block re-inserted to preserve history."
   (let ((notes (alist-get 'notes fields)))
     (concat
@@ -300,19 +302,40 @@ Returns the new id."
     id))
 
 (defun harp-write-update-medication (ref fields)
-  "Replace the medication at REF with FIELDS.
-Preserves its dose LOGBOOK and any `*** Schedule' subtrees beyond the
-first (the form edits only the first — see
-`harp-write--extract-extra-schedules')."
-  (let* ((id (or (alist-get 'id ref) (org-id-new)))
-         (marker (harp--resolve-ref ref))
-         (logbook (harp-write--extract-logbook marker))
-         (extra (harp-write--extract-extra-schedules marker))
-         (buf (harp-write--replace-subtree
-               ref (concat (harp-write--medication-text id fields logbook)
-                           (mapconcat #'identity extra "")))))
-    (harp-write--save buf)
-    id))
+  "Update medication REF from FIELDS, preserving logs and unmodeled Org data.
+Only the first Schedule child is edited; additional schedules remain intact."
+  (let* ((marker (harp--resolve-ref ref))
+         (buffer (harp-write--update-in-place
+                  ref (alist-get 'name fields) (alist-get 'tags fields)
+                  (append
+                   (mapcar (lambda (pair)
+                             (cons (car pair) (alist-get (cdr pair) fields)))
+                           '(("UNIT" . unit) ("STOCK" . stock) ("REFILL" . refill)
+                             ("LOW_STOCK" . low-stock)))
+                   (list (cons "EXPIRES" (harp-write--maybe-stamp (alist-get 'expires fields)))
+                         (cons "ACTIVE" (if (alist-get 'active fields) "t" "no"))))
+                  (alist-get 'notes fields))))
+    (with-current-buffer buffer
+      (org-with-wide-buffer
+       (goto-char marker)
+       (let ((end (save-excursion (org-end-of-subtree t t))))
+         (if (re-search-forward "^\\*\\*\\* Schedule[ \t]*$" end t)
+             (progn
+               (org-back-to-heading t)
+               (dolist (pair '(("AMOUNT" . amount) ("TIMES" . times) ("DAYS" . days)
+                               ("INTERVAL" . interval) ("WINDOW" . window)
+                               ("ACTIVE_DAYS" . active-days) ("PAUSE_DAYS" . pause-days)
+                               ("CYCLE_START" . cycle-start) ("FROM" . from) ("UNTIL" . until)))
+                 (let ((value (alist-get (cdr pair) fields)))
+                   (if (and value (not (string-empty-p value)))
+                       (org-entry-put (point) (car pair)
+                                      (if (memq (cdr pair) '(cycle-start from until))
+                                          (harp-write--maybe-stamp value) value))
+                     (org-entry-delete (point) (car pair))))))
+           (goto-char marker) (harp-write--insert-at-subtree-end)
+           (insert (harp-write--schedule-text fields))))))
+    (harp-write--save buffer)
+    (alist-get 'id ref)))
 
 (defun harp-write-delete-medication (ref)
   "Delete the medication subtree at REF."
@@ -327,7 +350,7 @@ first (the form edits only the first — see
 ;; ─── entries ────────────────────────────────────────────────────────────────
 
 (defun harp-write-add-entry (journal date time tags private body)
-  "Append a new entry under JOURNAL.  Return the new id."
+  "Append under JOURNAL using DATE, TIME, TAGS, PRIVATE and BODY; return its ID."
   (let ((buf (harp-write--buffer)) (id (org-id-new)))
     (with-current-buffer buf
       (org-with-wide-buffer
@@ -339,7 +362,7 @@ first (the form edits only the first — see
     id))
 
 (defun harp-write-update-entry (ref date time tags private body)
-  "Update the entry at REF in place, preserving unmodeled org content."
+  "Update REF with DATE, TIME, TAGS, PRIVATE and BODY, preserving other Org data."
   (let ((buf (harp-write--update-in-place
               ref nil tags
               `(("DATETIME" . ,(harp-write--stamp date time))
@@ -351,7 +374,7 @@ first (the form edits only the first — see
 ;; ─── documents ──────────────────────────────────────────────────────────────
 
 (defun harp-write-add-document (name date time source files tags private annotation)
-  "Append a new document.  Return the new id."
+  "Append NAME with DATE, TIME, SOURCE, FILES, TAGS, PRIVATE and ANNOTATION."
   (let ((buf (harp-write--buffer)) (id (org-id-new)))
     (with-current-buffer buf
       (org-with-wide-buffer
@@ -363,7 +386,8 @@ first (the form edits only the first — see
     id))
 
 (defun harp-write-update-document (ref name date time source files tags private annotation)
-  "Update the document at REF in place, preserving unmodeled org content."
+  "Update REF with NAME, DATE, TIME, SOURCE, FILES and TAGS.
+PRIVATE controls visibility; ANNOTATION is the body."
   (let ((buf (harp-write--update-in-place
               ref name tags
               `(("SOURCE" . ,(and source (not (string-empty-p (string-trim source)))
@@ -378,7 +402,7 @@ first (the form edits only the first — see
 ;; ─── metrics ────────────────────────────────────────────────────────────────
 
 (defun harp-write-add-metric (name tag-id unit range healthy tags)
-  "Append a new metric definition under Metadata/Metrics."
+  "Append metric NAME with TAG-ID, UNIT, RANGE, HEALTHY range and TAGS."
   (let ((buf (harp-write--buffer)))
     (with-current-buffer buf
       (org-with-wide-buffer
@@ -393,7 +417,7 @@ first (the form edits only the first — see
     tag-id))
 
 (defun harp-write-update-metric (ref name tag-id unit range healthy tags)
-  "Update the metric at REF in place, preserving its description body."
+  "Update REF with NAME, TAG-ID, UNIT, RANGE, HEALTHY range and TAGS."
   (let ((buf (harp-write--update-in-place
               ref name tags
               `(("TAG_ID" . ,tag-id)
@@ -421,7 +445,7 @@ first (the form edits only the first — see
 ;; ─── new profile ────────────────────────────────────────────────────────────
 
 (defun harp-write--profile-template (name id type)
-  "The Org text for a fresh profile (mirrors harp-kmp `newProfileText')."
+  "Build a fresh profile from NAME, ID and TYPE, matching harp-kmp."
   (concat
    ":PROPERTIES:\n"
    (format ":ID: %s\n" id)
@@ -450,7 +474,7 @@ Creates it at end of file when missing.  Point is left unspecified."
     (if (string-empty-p slug) "profile" slug)))
 
 (defun harp-write-new-profile (name type)
-  "Create a new profile file under `harp-directory'.  Return its path."
+  "Create profile NAME of TYPE under `harp-directory'; return its path."
   (make-directory harp-directory t)
   (let* ((base (harp-write--profile-slug name))
          (file (expand-file-name (concat base ".org") harp-directory))

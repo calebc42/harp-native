@@ -1,5 +1,6 @@
 ;;; harp-profile.el --- Read Harp profile Org files -*- lexical-binding: t; -*-
-
+;; Package-Requires: ((emacs "30.1"))
+;;; Commentary:
 ;; The Harp schema read layer.  A profile is one Org file with a file-level
 ;; :ID:, :HARP_TYPE:, and a #+TITLE:/:HARP_NAME:, holding the sections
 ;; Metadata (Sources, Metrics), Journals (`** Name' subtrees of `*** Entry'),
@@ -9,15 +10,14 @@
 ;; It replaces harp-kmp's Kotlin OrgLexer + hand-written parser with native
 ;; org-mode: `org-map-entries' walks the tree, `org-get-outline-path' routes
 ;; each heading to its section, and `org-entry-get' reads properties.  Pure
-;; elisp; no bridge dependencies (the views layer memoises calls here through
-;; the core's `jetpacs-org-with-cache').
+;; elisp; no bridge dependencies (the snapshot producer calls this adapter).
 
 ;;; Code:
 
 (require 'org)
 (require 'org-id)
 (require 'cl-lib)
-(require 'jetpacs-org)
+(require 'ebp-org)
 (require 'harp-metrics-parse)
 
 (defgroup harp nil
@@ -41,18 +41,21 @@ Each profile is a `.org' file with a file-level :ID: and the Harp sections."
   (and (stringp ts) (not (string-empty-p ts))
        (ignore-errors (float-time (org-time-string-to-time ts)))))
 
+(declare-function harp-safe-file "harp-state" (file))
+(declare-function harp-heading-ref "harp-state" ())
+(declare-function harp-ref-plist "harp-state" (ref))
+
 (defun harp--visit-file (file)
-  "Visit FILE for reading, silently re-reading it if it changed on disk.
-Reads run from the background notify timer as well as from user actions;
-an external sync edit (Syncthing, git) must never raise a blocking
-\"changed on disk\" prompt — nor return stale content (the CLAUDE.md
-gotcha).  NOWARN suppresses the prompt; the modtime check then reverts
-without confirmation when the disk copy is newer."
-  (let ((buf (find-file-noselect file t)))
+  "Visit bounded FILE without executing its local variables or losing edits."
+  (setq file (harp-safe-file file))
+  (let ((existing (get-file-buffer file)))
+    (when (and existing (buffer-modified-p existing))
+      (error "Save the open profile buffer first")))
+  (let* ((enable-local-variables nil) (enable-local-eval nil)
+         (buf (find-file-noselect file t)))
     (with-current-buffer buf
       (unless (verify-visited-file-modtime buf)
-        (let ((revert-without-query (list (regexp-quote file))))
-          (revert-buffer :ignore-auto :noconfirm :preserve-modes))))
+        (revert-buffer t t)))
     buf))
 
 (defun harp--encode-local (decoded)
@@ -136,8 +139,8 @@ capture the drawer into `notes', and an edit would then re-emit it twice."
 
 (defun harp--prop-bool (val default)
   "Interpret property string VAL as a boolean; nil/absent -> DEFAULT.
-Note: `org-entry-get' returns nil for a literal `nil' property value
-\(org treats it as unset), so inactive is written as `no', not `nil'."
+Note: `org-entry-get' returns nil for a literal nil property value
+\(org treats it as unset), so inactive is written as `no', not nil."
   (cond ((null val) default)
         ((member (downcase (string-trim val)) '("no" "false" "off" "0" "n" "")) nil)
         (t t)))
@@ -154,26 +157,21 @@ Note: `org-entry-get' returns nil for a literal `nil' property value
         #'string<))
 
 (defun harp--resolve-ref (ref)
-  "Resolve REF to a live marker at its org heading, ID-first and file-scoped.
-Unlike `jetpacs-org-resolve-ref' this NEVER trusts REF's recorded position
-for an ID-bearing item — every Harp journal entry has the headline
-\"Entry\", so a positional guess after an unrelated byte shift would delete
-and overwrite the WRONG subtree.  It also searches only REF's own file for
-its `:ID:', so it never triggers `org-id''s full-tree location rescan (Harp
-writes IDs without registering them).  Falls back to the core resolver only
-for ID-less refs."
-  (let ((id (alist-get 'id ref))
-        (file (alist-get 'file ref)))
-    (if (and (stringp id) (not (string-empty-p id))
-             (stringp file) (file-readable-p file))
+  "Resolve internal REF through canonical Org APIs within its own file.
+ID-bearing records require exactly one matching heading.  ID-less records
+use the owning Org engine's position/headline validation."
+  (let ((id (alist-get 'id ref)) (file (alist-get 'file ref)))
+    (if (and (stringp id) (not (string-empty-p id)))
         (with-current-buffer (harp--visit-file file)
           (org-with-wide-buffer
-           (goto-char (point-min))
-           (if (re-search-forward
-                (format "^[ \t]*:ID:[ \t]+%s[ \t]*$" (regexp-quote id)) nil t)
-               (save-excursion (org-back-to-heading t) (point-marker))
-             (error "Harp: item %s not found in %s" id file))))
-      (jetpacs-org-resolve-ref ref))))
+           (let (matches)
+             (org-map-entries
+              (lambda ()
+                (when (equal id (org-entry-get (point) "ID"))
+                  (push (point-marker) matches))) nil nil)
+             (unless (= 1 (length matches)) (error "Ambiguous or missing record identity"))
+             (car matches))))
+      (ebp-org-resolve-ref (harp-ref-plist ref)))))
 
 ;; ─── per-heading readers (point is on the heading) ──────────────────────────
 
@@ -188,7 +186,7 @@ for ID-less refs."
         (tags . ,(harp--tags-at-point))
         (range . ,(harp-parse-range (org-entry-get (point) "RANGE")))
         (healthy-range . ,(harp-parse-range (org-entry-get (point) "HEALTHY_RANGE")))
-        (ref . ,(jetpacs-org-heading-ref))))))
+        (ref . ,(harp-heading-ref))))))
 
 (defun harp--read-entry ()
   "Read a journal entry at point (`*** Entry' under a journal)."
@@ -207,7 +205,7 @@ for ID-less refs."
           (body . ,body)
           (metric-values . ,(harp--metric-values body dt time))
           (assets . ,(harp--attachment-links body))
-          (ref . ,(jetpacs-org-heading-ref)))))))
+          (ref . ,(harp-heading-ref)))))))
 
 (defun harp--read-document ()
   "Read a document at point (`** Name' under Documents)."
@@ -234,7 +232,7 @@ for ID-less refs."
           (heading-tags . ,(harp--tags-at-point))
           (annotation . ,annotation)
           (metric-values . ,(harp--metric-values annotation dt time))
-          (ref . ,(jetpacs-org-heading-ref)))))))
+          (ref . ,(harp-heading-ref)))))))
 
 (defun harp--read-reminder ()
   "Read a reminder at point (`** Title' under Reminders)."
@@ -253,7 +251,7 @@ for ID-less refs."
           (scheduled-time . ,(harp--time-of sched))
           (deadline-time . ,(harp--time-of deadline))
           (body . ,(harp--body-at-point))
-          (ref . ,(jetpacs-org-heading-ref)))))))
+          (ref . ,(harp-heading-ref)))))))
 
 ;; ─── medications (a `* Medications' section) ────────────────────────────────
 
@@ -324,7 +322,7 @@ Scans only the med heading's own content (before its schedule children)."
     (window . ,(org-entry-get (point) "WINDOW"))
     (from . ,(org-entry-get (point) "FROM"))
     (until . ,(org-entry-get (point) "UNTIL"))
-    (ref . ,(jetpacs-org-heading-ref))))
+    (ref . ,(harp-heading-ref))))
 
 (defun harp--read-medication ()
   "Read a medication at point (`** Name' under Medications); nil without :ID:."
@@ -338,13 +336,13 @@ Scans only the med heading's own content (before its schedule children)."
         (refill . ,(harp-parse--num-or-nil (org-entry-get (point) "REFILL")))
         (low-stock . ,(harp-parse--num-or-nil (org-entry-get (point) "LOW_STOCK")))
         (expires . ,(org-entry-get (point) "EXPIRES"))
-        ;; Absent :ACTIVE: means active; write `no' (not `nil') to deactivate.
+        ;; Absent :ACTIVE: means active; write `no' (not nil) to deactivate.
         (active . ,(harp--prop-bool (org-entry-get (point) "ACTIVE") t))
         (notes . ,(harp--strip-logbook (harp--content-before-children)))
         (tags . ,(harp--tags-at-point))
         (doses . ,(harp--dose-events-at-point))
         (schedules . nil)
-        (ref . ,(jetpacs-org-heading-ref))))))
+        (ref . ,(harp-heading-ref))))))
 
 ;; ─── whole-file read ────────────────────────────────────────────────────────
 
@@ -357,6 +355,7 @@ documents are sorted newest-first, mirroring harp-kmp."
     (with-current-buffer (harp--visit-file file)
       (org-with-wide-buffer
        (goto-char (point-min))
+       (when (> (how-many "^\\*+ ") 2000) (error "Profile exceeds 2000 headings"))
        (let ((uuid (org-entry-get (point-min) "ID")))
          (when (and uuid (not (string-empty-p (string-trim uuid))))
            (let ((type (harp--type-of (org-entry-get (point-min) "HARP_TYPE")))
@@ -372,19 +371,19 @@ documents are sorted newest-first, mirroring harp-kmp."
                        (path (org-get-outline-path)))
                   (cond
                    ((and (= lvl 3) (equal path '("Metadata" "Metrics")))
-                    (when-let ((m (harp--read-metric))) (push m metrics)))
+                    (when-let* ((m (harp--read-metric))) (push m metrics)))
                    ((and (= lvl 2) (equal path '("Journals")))
                     (let ((jn (nth 4 c)))
                       (unless (member jn journal-order) (push jn journal-order))))
                    ((and (= lvl 3) (equal (car path) "Journals"))
-                    (when-let ((e (harp--read-entry)))
+                    (when-let* ((e (harp--read-entry)))
                       (push (cons (nth 1 path) e) entries)))
                    ((and (= lvl 2) (equal (car path) "Documents"))
-                    (when-let ((d (harp--read-document))) (push d documents)))
+                    (when-let* ((d (harp--read-document))) (push d documents)))
                    ((and (= lvl 2) (equal (car path) "Reminders"))
-                    (when-let ((r (harp--read-reminder))) (push r reminders)))
+                    (when-let* ((r (harp--read-reminder))) (push r reminders)))
                    ((and (= lvl 2) (equal path '("Medications")))
-                    (when-let ((m (harp--read-medication))) (push m meds)))
+                    (when-let* ((m (harp--read-medication))) (push m meds)))
                    ((and (= lvl 3) (equal (car path) "Medications"))
                     ;; Attach to the med just walked past — traversal order
                     ;; guarantees it is the parent — so two meds sharing a
@@ -428,47 +427,35 @@ documents are sorted newest-first, mirroring harp-kmp."
 ;; ─── discovery ──────────────────────────────────────────────────────────────
 
 (defun harp-profile--head-props (file)
-  "Head-read of FILE's file-level property drawer, or nil when not a profile.
-Reads only the first 4KB into a temp buffer — discovery sweeps every `.org'
-under `harp-directory' recursively, and `find-file-noselect' per candidate
-would leave a visiting buffer behind for each.  Returns an alist with `id',
-`name', `type', `title' (any of the last three may be nil)."
+  "Read FILE's bounded preamble with canonical Org property and title APIs.
+Discovery reads at most 4096 bytes into a temporary Org buffer and never
+executes file-local variables or user mode hooks."
   (when (and (stringp file) (file-readable-p file))
     (with-temp-buffer
       (insert-file-contents file nil 0 4096)
+      (delay-mode-hooks (org-mode))
       (goto-char (point-min))
-      ;; The FILE-level drawer must open the file (matching the previous
-      ;; `org-entry-get (point-min)' semantics).
-      (when (looking-at "[ \t]*:PROPERTIES:")
-        (let ((end (save-excursion
-                     (or (re-search-forward "^[ \t]*:END:[ \t]*$" nil t)
-                         (point-max))))
-              (grab (lambda (re bound)
-                      (save-excursion
-                        (when (re-search-forward re bound t)
-                          (match-string 1)))))
-              )
-          (let ((id (funcall grab "^[ \t]*:ID:[ \t]*\\(.+?\\)[ \t]*$" end)))
-            (when (and id (not (string-empty-p (string-trim id))))
-              `((id . ,id)
-                (name . ,(funcall grab "^[ \t]*:HARP_NAME:[ \t]*\\(.+?\\)[ \t]*$" end))
-                (type . ,(funcall grab "^[ \t]*:HARP_TYPE:[ \t]*\\(.+?\\)[ \t]*$" end))
-                (title . ,(funcall grab "^[ \t]*#\\+TITLE:[ \t]*\\(.+?\\)[ \t]*$" nil))))))))))
+      (when (org-before-first-heading-p)
+        (let ((id (org-entry-get (point-min) "ID")))
+          (when (and id (not (string-empty-p id)))
+            (list (cons 'id id)
+                  (cons 'name (org-entry-get (point-min) "HARP_NAME"))
+                  (cons 'type (org-entry-get (point-min) "HARP_TYPE"))
+                  (cons 'title (org-get-title)))))))))
 
 (defun harp-profile-file-p (file)
   "Non-nil if FILE looks like a Harp profile (has a file-level :ID:)."
   (and (harp-profile--head-props file) t))
 
+(declare-function harp-discover "harp-state" ())
 (defun harp-profile-files ()
-  "List of Harp profile `.org' files found under `harp-directory'."
-  (when (and harp-directory (file-directory-p harp-directory))
-    (cl-remove-if-not #'harp-profile-file-p
-                      (directory-files-recursively harp-directory "\\.org\\'"))))
+  "Return bounded profiles discovered below the configured directory."
+  (harp-discover))
 
 (defun harp-profile-info (file)
   "Cheap profile summary alist (`uuid' `name' `type' `file') for FILE, or nil.
 Head-read only — the launcher list opens no buffers and runs no org parse."
-  (when-let ((head (harp-profile--head-props file)))
+  (when-let* ((head (harp-profile--head-props file)))
     `((uuid . ,(string-trim (alist-get 'id head)))
       (name . ,(string-trim (or (alist-get 'name head)
                                 (alist-get 'title head) "")))

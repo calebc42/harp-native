@@ -1,11 +1,12 @@
 ;;; harp-med-schedule.el --- Harp medication scheduling engine -*- lexical-binding: t; -*-
-
+;; Package-Requires: ((emacs "30.1"))
+;;; Commentary:
 ;; Computes which doses a medication is due on a given day, the next future
 ;; dose (for arming alarms), and which of today's doses are still pending.
 ;; Composes MedTimer's schedule modifiers on top of a schedule's :TIMES: (or
 ;; :INTERVAL:): weekday filter (:DAYS:), cyclic active/pause cycles
 ;; (:CYCLE_START:/:ACTIVE_DAYS:/:PAUSE_DAYS:), and a date period
-;; (:FROM:/:UNTIL:, for tapering). Pure elisp; date math via `time-to-days'
+;; (:FROM:/:UNTIL:, for tapering).  Pure elisp; date math via `time-to-days'
 ;; and `decode-time'.
 
 ;;; Code:
@@ -13,13 +14,13 @@
 (require 'cl-lib)
 (require 'harp-profile)                 ; harp--time-of
 (require 'harp-med)                     ; accessors, harp-med-doses-on
-(require 'harp-ui)                      ; harp-ui-memo (push-scoped memo)
+(require 'harp-state)
 
 (defconst harp-med--weekday-abbrevs ["Sun" "Mon" "Tue" "Wed" "Thu" "Fri" "Sat"]
   "English weekday abbreviations indexed by `decoded-time-weekday' (0=Sun).")
 
 (defun harp-med--duration-seconds (s)
-  "Parse a duration string like \"6h\" / \"90m\" / \"3d\" / \"2w\" into seconds."
+  "Parse duration string S like \"6h\" / \"90m\" / \"3d\" / \"2w\" into seconds."
   (when (stringp s)
     ;; Match and extract against the SAME (trimmed) string — matching the
     ;; trimmed one but extracting groups from the original returns shifted
@@ -133,7 +134,7 @@ a continuous sequence from an anchor (`harp-med-schedule--interval-multiday')."
       (let ((bounds (harp-med-schedule--window-bounds (alist-get 'window schedule))))
         (if (>= secs 86400)
             (and date (harp-med-schedule--interval-multiday schedule date secs bounds))
-          (let ((step (/ secs 60)) (m (car bounds)) (end (cdr bounds)) out)
+          (let ((step (max 1 (/ secs 60))) (m (car bounds)) (end (cdr bounds)) out)
             (while (<= m end)
               (push (format "%02d:%02d" (/ m 60) (% m 60)) out)
               (setq m (+ m step)))
@@ -164,14 +165,17 @@ Each dose is an alist: `time' (\"HH:MM\"), `at' (float-time), `amount',
     (sort out (lambda (a b) (string< (alist-get 'time a) (alist-get 'time b))))))
 
 (defun harp-med-schedule-pending (med &optional date)
-  "MED's still-pending doses on DATE (default today).
-Count-based: the first K scheduled doses (K = doses logged that day) are
-treated as done, the rest are pending."
+  "Return MED's pending doses on DATE by exact scheduled minute.
+Each log entry consumes one matching dose, so recording an evening dose
+never dismisses an unrecorded morning dose."
   (let* ((date (or date (current-time)))
-         (dstr (format-time-string "%Y-%m-%d" date))
-         (scheduled (harp-med-schedule-doses-on med date))
-         (logged (length (harp-med-doses-on med dstr))))
-    (nthcdr (min logged (length scheduled)) scheduled)))
+         (pending (harp-med-schedule-doses-on med date)))
+    (dolist (event (harp-med-doses-on med (format-time-string "%Y-%m-%d" date)))
+      (let ((match (cl-find-if
+                    (lambda (dose) (equal (format-time-string "%Y-%m-%d %H:%M" (seconds-to-time (alist-get 'at dose)))
+                                          (alist-get 'stamp event))) pending)))
+        (when match (setq pending (delq match pending)))))
+    pending))
 
 (defun harp-med-schedule-next-dose (med &optional after horizon-days)
   "The next dose (full alist, carrying `at') for MED strictly after AFTER.
@@ -191,7 +195,7 @@ CALENDAR days (not 86400 s), so no day is skipped across a DST transition."
       nil)))
 
 (defun harp-med-schedule-next (med &optional after horizon-days)
-  "The next dose datetime (float) for MED strictly after AFTER, or nil."
+  "The next dose time for MED after AFTER, within HORIZON-DAYS, or nil."
   (alist-get 'at (harp-med-schedule-next-dose med after horizon-days)))
 
 (defun harp-med-schedule-due-today (&optional profile)
@@ -202,14 +206,6 @@ Sorted by time — the shape the Due-today list wants."
       (dolist (d (harp-med-schedule-pending m))
         (push (cons (cons 'med m) d) out)))
     (sort out (lambda (a b) (string< (alist-get 'time a) (alist-get 'time b))))))
-
-(defun harp-med-due-today ()
-  "Pending doses today across the current profile, memoised for the push.
-Three surfaces ask for this each push — the due list, its badge count, and
-the notification sync — so compute it once.  Keyed on the calendar day so
-it recomputes across midnight; busts with the profile read on any dose log."
-  (harp-ui-memo (cons 'due-today (format-time-string "%Y-%m-%d"))
-                (lambda () (harp-med-schedule-due-today))))
 
 (provide 'harp-med-schedule)
 ;;; harp-med-schedule.el ends here

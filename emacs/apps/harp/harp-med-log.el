@@ -1,5 +1,6 @@
 ;;; harp-med-log.el --- Harp dose logging -*- lexical-binding: t; -*-
-
+;; Package-Requires: ((emacs "30.1"))
+;;; Commentary:
 ;; Recording a dose Taken or Skipped: prepend a `- STATE [ts] AMOUNT' line to
 ;; the medication's :LOGBOOK: drawer and, on Taken, decrement its :STOCK: by
 ;; the dose amount (MedTimer's ReminderEvent + stockBefore/stockAfter, org-native).
@@ -11,12 +12,12 @@
 (require 'org)
 (require 'cl-lib)
 (require 'subr-x)
-(require 'jetpacs-org)
-(require 'jetpacs-shell)
-(require 'jetpacs-surfaces)
+(require 'ebp-org)
+
+
 (require 'harp-profile)
 (require 'harp-write)                   ; harp-write--save
-(require 'harp-ui)
+(require 'harp-state)
 (require 'harp-med)
 (require 'harp-metrics-parse)           ; harp-parse--num-or-nil
 
@@ -37,7 +38,7 @@
           (t ""))))
 
 (defun harp-med-log--insert (state amount unit &optional at)
-  "At the medication heading at point, prepend a dose log line.
+  "Prepend a STATE dose with AMOUNT and UNIT at the medication heading.
 AT (a Lisp time, default now) stamps the line — a dose taken offline is
 logged at its `queued_at' time, not at reconnect.  Creates the :LOGBOOK:
 drawer after the property drawer when absent."
@@ -83,46 +84,6 @@ drops the read memo."
        (harp-med-log--insert state amount unit at)))
     (harp-write--save (marker-buffer marker))))
 
-(defun harp-med-log--resolve (args)
-  "Resolve the medication targeted by dose ARGS, across profiles.
-Prefers the profile FILE baked into the action at render time (validated
-against discovery) so a queued tap survives an Emacs restart or a different
-profile being open; falls back to the current profile."
-  (let ((id (alist-get 'id args))
-        (file (alist-get 'file args)))
-    (when (stringp id)
-      (if (and (stringp file) (member file (harp-profile-files)))
-          (harp-med-by-id id (harp-profile-read file))
-        (harp-med-by-id id)))))
-
-(defun harp-med-log--dose (args payload state)
-  "Handle a taken/skipped ARGS dispatch for STATE.
-PAYLOAD carries `queued_at' for events replayed from the offline queue."
-  (let* ((med (harp-med-log--resolve args))
-         (amount (alist-get 'amount args))
-         (unit (or (alist-get 'unit args) (and med (alist-get 'unit med))))
-         (queued (alist-get 'queued_at payload))
-         (at (and (numberp queued) (seconds-to-time (/ queued 1000.0)))))
-    (if med
-        (progn
-          (harp-med-log-write (alist-get 'ref med) state amount unit
-                              ;; Only Taken consumes stock.
-                              (and (equal state "taken")
-                                   (harp-parse--num-or-nil amount))
-                              at)
-          (jetpacs-shell-notify
-           (format "%s: %s" (alist-get 'name med) (capitalize state)))
-          (jetpacs-shell-push))
-      ;; Never drop a dose silently — the adherence record is the point.
-      (display-warning
-       'harp (format "Dose (%s) not recorded: medication %s not found%s"
-                     state (alist-get 'id args)
-                     (if (alist-get 'file args)
-                         (format " in %s" (alist-get 'file args)) ""))
-       :warning)
-      (jetpacs-shell-notify "Dose not recorded — its medication wasn't found")
-      (jetpacs-shell-push))))
-
 (defun harp-med-log-refill (med)
   "Add MED's `:REFILL:' size to its `:STOCK:'.  Return the new stock, or nil.
 The one-tap \"picked up a new pack\" affordance (MedTimer's refill)."
@@ -139,36 +100,6 @@ The one-tap \"picked up a new pack\" affordance (MedTimer's refill)."
              (org-entry-put (point) "STOCK" (harp-med-log--fmt-num new)))))
         (harp-write--save (marker-buffer marker))
         new))))
-
-(with-jetpacs-owner "harp"
-  (jetpacs-defaction "harp.med.refill"
-    (lambda (args _)
-      (let ((med (harp-med-log--resolve args)))
-        (when med
-          (when-let ((new (harp-med-log-refill med)))
-            (jetpacs-shell-notify
-             (format "%s: stock now %s %s" (alist-get 'name med)
-                     (harp-med-log--fmt-num new) (or (alist-get 'unit med) "")))
-            (jetpacs-shell-push)))))
-    :doc "Add a medication's refill size to its stock."
-    :args '((:name id :type "text" :required t)
-            (:name file :type "text")))
-
-  (jetpacs-defaction "harp.med.taken"
-    (lambda (args payload) (harp-med-log--dose args payload "taken"))
-    :doc "Log a medication dose as taken (decrements stock)."
-    :args '((:name id :type "text" :required t)
-            (:name amount :type "text")
-            (:name unit :type "text")
-            (:name file :type "text")))
-
-  (jetpacs-defaction "harp.med.skipped"
-    (lambda (args payload) (harp-med-log--dose args payload "skipped"))
-    :doc "Log a medication dose as skipped."
-    :args '((:name id :type "text" :required t)
-            (:name amount :type "text")
-            (:name unit :type "text")
-            (:name file :type "text"))))
 
 (provide 'harp-med-log)
 ;;; harp-med-log.el ends here
