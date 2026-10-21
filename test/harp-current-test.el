@@ -225,3 +225,50 @@
 
 (provide 'harp-current-test)
 ;;; harp-current-test.el ends here
+
+(ert-deftest harp-current-list-page-is-bound-to-the-document ()
+  "The journal page is one row template over `/rows'; the document carries
+the visible page, and a first-page filter patches it instead of
+re-pushing (PLAN-responsiveness A1a)."
+  (harp-test-with-snapshot
+    (let ((harp-state-route '(:view "journal")))
+      (let* ((doc (harp-ui-document)) (rows (plist-get doc :rows)))
+        ;; Three public entries; the private one stays out.
+        (should (= 3 (length rows)))
+        (should (cl-every (lambda (r) (and (stringp (plist-get r :id))
+                                           (stringp (plist-get r :title))))
+                          rows))
+        (should (equal "All tags" (plist-get doc :filter_label)))
+        (should (eq :json-false (plist-get doc :paging)))
+        (should (equal "" (plist-get doc :page_label))))
+      (let ((json (jetpacs-node->canonical-json (harp-ui-screen '(:view "journal")))))
+        (should (string-match-p "\"template\"" json))
+        (should (string-match-p "\"bind\":{\"children\":\"/rows\"}" json))
+        (should (string-match-p "/filter_label" json))
+        (should-not (string-match-p "Synthetic journal" json)))
+      ;; Without the Companion's data model the shell expands the page here.
+      (let* ((expanded (jetpacs-data-materialize (harp-ui-screen '(:view "journal"))
+                                                 (harp-ui-document) :strip t))
+             (json (jetpacs-node->canonical-json expanded)))
+        (should (string-match-p "Synthetic journal" json))
+        (should-not (string-match-p "PRIVATE_SENTINEL" json))
+        (jetpacs-shell--gate-ids expanded nil))
+      ;; A tag filter on the first page: one patch of the document.
+      (let ((patched nil) (pushed 0) (tag "sample"))
+        (cl-letf (((symbol-function 'jetpacs-app-defer-patch)
+                   (lambda (ops _params) (setq patched ops)))
+                  ((symbol-function 'jetpacs-shell-push)
+                   (lambda (&rest _) (cl-incf pushed)))
+                  ((symbol-function 'harp-profile-tags)
+                   (lambda (_profile) (list tag))))
+          (should (eq 'accepted (harp--on-filter (list :tag tag) '(:surface "app:harp"))))
+          (should patched)
+          (should (= 0 pushed))
+          (should (equal harp-state-tag tag))
+          (let ((label (cl-find-if (lambda (op) (equal (plist-get op :path) "/filter_label")) patched)))
+            (should (equal (plist-get label :value) (concat "#" tag " ×"))))
+          ;; From a later page the buttons' arguments change: re-push.
+          (setq harp-state-page 1 patched nil)
+          (should (eq 'accepted (harp--on-filter nil '(:surface "app:harp"))))
+          (should-not patched)
+          (should (= 0 harp-state-page)))))))

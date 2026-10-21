@@ -11,6 +11,7 @@
 (defvar harp-hide-private t "Whether private records are hidden from screens.")
 (defvar harp-state-tag nil "Current tag filter, or nil.")
 (defvar harp-state-page 0 "Current record page.")
+(defvar harp-state-route nil "The route last opened, as `harp--open' received it.")
 (defvar harp-state-epoch nil "Producer-minted process identity preventing token reuse after restart.")
 (defvar harp-state-generation 0 "Monotonic process-local snapshot generation.")
 (defconst harp-page-size 20 "Maximum records rendered on one page.")

@@ -24,7 +24,7 @@
 
 (defun harp--open (route)
   "Defer presentation of ROUTE without deferring a durable effect."
-  (setq harp-state-page 0)
+  (setq harp-state-page 0 harp-state-route route)
   (harp--later (lambda ()
                 (with-jetpacs-owner "harp"
                   (jetpacs-chrome-reset-screens "harp" t)
@@ -70,7 +70,10 @@
   "Open the form kind in ARGS after checking its record identity."
   (harp--guard
    (lambda ()
-     (let ((kind (plist-get args :form)) (token (plist-get args :id)))
+     (let ((kind (plist-get args :form))
+           ;; A record card inside the bound list carries no `:id': the
+           ;; Companion injects the row's key as `:item' (SPEC 14.3).
+           (token (or (plist-get args :id) (plist-get args :item))))
        (unless (assoc kind harp-form-schema) (error "Unknown form"))
        (when token (harp-resolve token kind t))
        (unless (or (equal kind "profile") (harp-ui-current)) (error "Open a profile"))
@@ -210,11 +213,22 @@
       (let ((out (make-temp-file (expand-file-name "harp-export-" harp-directory) nil (concat "." format)))
             (text (if (equal format "org") (harp-export-text profile) (harp-export-html profile))))
         (with-temp-file out (insert text))) 'accepted))))
-(defun harp--on-filter (args _params)
-  "Set or clear ARGS' bounded tag filter."
+(defun harp--on-filter (args params)
+  "Set or clear ARGS' bounded tag filter; PARAMS name the tapped surface.
+The filter moves only values the record list binds to the surface data
+document (`harp-ui-document'), so on the first page it patches the
+document instead of re-pushing the whole stack.  From a later page the
+paging buttons' arguments change too, which is a shape change: the
+screen is re-pushed as before."
   (let ((tag (plist-get args :tag)))
     (if (or (null tag) (member tag (harp-profile-tags (harp-ui-current))))
-        (progn (setq harp-state-tag tag harp-state-page 0) (harp--later (lambda () (jetpacs-shell-push "harp"))) 'accepted) 'rejected)))
+        (let ((first-page (zerop harp-state-page)))
+          (setq harp-state-tag tag harp-state-page 0)
+          (if (and first-page (harp-ui-list-view-p harp-state-route))
+              (jetpacs-app-defer-patch (harp-ui-document-ops) params)
+            (harp--later (lambda () (jetpacs-shell-push "harp"))))
+          'accepted)
+      'rejected)))
 (defun harp--on-page (args _params)
   "Select ARGS' bounded record page."
   (let ((page (plist-get args :page)))
@@ -231,12 +245,13 @@
   "Register Harp without reading profiles or enabling alarms."
   (harp-design-register)
   (with-jetpacs-owner "harp"
-    (jetpacs-chrome-define-root "harp" "profiles" (lambda (back) (harp-ui-screen '(:view "profiles") back)) :required t)
+    (jetpacs-chrome-define-root "harp" "profiles" (lambda (back) (harp-ui-screen '(:view "profiles") back))
+                                :required t :data-builder #'harp-ui-document)
     (jetpacs-defaction "harp.home" #'harp--on-home :doc "Refresh and open Harp profiles")
     (jetpacs-defaction "harp.open" #'harp--on-open :doc "Open a Harp destination" :args '((:name view :type "enum" :required t)))
     (jetpacs-defaction "harp.refresh" #'harp--on-refresh :doc "Refresh the bounded health-record snapshot")
     (jetpacs-defaction "harp.profile" #'harp--on-profile :doc "Open the profile selected by an opaque identity" :args '((:name id :type "ref" :required t)))
-    (jetpacs-defaction "harp.form" #'harp--on-form :doc "Open a record capture or edit form" :args '((:name form :type "enum" :required t) (:name id :type "ref")))
+    (jetpacs-defaction "harp.form" #'harp--on-form :doc "Open a record capture or edit form" :args '((:name form :type "enum" :required t) (:name id :type "ref") (:name item :type "ref")))
     (jetpacs-defaction "harp.save" #'harp--on-save :doc "Validate captured fields and save the Org record before acceptance" :args '((:name form :type "enum" :required t) (:name id :type "ref") (:name revision :type "text" :required t)))
     (jetpacs-defaction "harp.delete" #'harp--on-delete :doc "Delete a confirmed current record" :args '((:name id :type "ref" :required t)))
     (jetpacs-defaction "harp.dose" #'harp--on-dose :doc "Record a scheduled dose and atomically adjust stock" :args '((:name id :type "ref" :required t) (:name state :type "enum" :required t)))

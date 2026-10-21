@@ -53,8 +53,11 @@
                            ("reminders" . "Reminders") ("settings" . "Settings"))) '(:scroll t :spacing 4))))
 
 (defun harp-ui-text (value &optional style)
-  "Build readable VALUE with optional typography STYLE."
-  (jetpacs-text (format "%s" (or value "")) :style (or style "body")))
+  "Build readable VALUE with optional typography STYLE.
+A `jetpacs-ref' VALUE passes through: the Companion resolves it against
+the surface data document (SPEC 13.8.3)."
+  (jetpacs-text (if (jetpacs-ref-p value) value (format "%s" (or value "")))
+                :style (or style "body")))
 
 (defun harp-ui-range (range)
   "Format the recovered numeric RANGE cons."
@@ -122,6 +125,95 @@
                      (jetpacs-button "Previous" (harp-action "harp.page" (list :page (max 0 (1- page)))))
                      (harp-ui-text (format "%d–%d / %d" (1+ start) end total) "caption")
                      (jetpacs-button "Next" (harp-action "harp.page" (list :page (1+ page)))) :spacing 8))))))
+
+(defconst harp-ui-list-views '(("journal" . "entry") ("documents" . "document"))
+  "The record views whose page the surface data document carries, by form kind.")
+
+(defun harp-ui-list-view-p (route)
+  "Non-nil for a ROUTE whose view is a record list bound to the document."
+  (and (not (plist-get route :form))
+       (assoc (plist-get route :view) harp-ui-list-views)
+       t))
+
+(defun harp-ui-list-items (view profile)
+  "The visible records of list VIEW in PROFILE, in page order."
+  (cl-remove-if-not
+   #'harp-visible-p
+   (if (equal view "journal")
+       (apply #'append (mapcar (lambda (j) (alist-get 'entries j)) (alist-get 'journals profile)))
+     (alist-get 'documents profile))))
+
+(defun harp-ui-row (item)
+  "ITEM as a surface data document row: the values its card binds."
+  (list :id (alist-get 'token item)
+        :title (format "%s" (or (alist-get 'name item) (alist-get 'title item) (alist-get 'datetime item) ""))
+        :caption (string-join (delq nil (list (alist-get 'journal item) (alist-get 'datetime item)
+                                             (alist-get 'source item))) " · ")
+        :body (truncate-string-to-width (or (alist-get 'body item) (alist-get 'annotation item)
+                                            (alist-get 'notes item) "") 500 nil nil "…")
+        :tags (mapconcat (lambda (tag) (concat "#" tag)) (alist-get 'tags item) " ")
+        :files (string-join (alist-get 'files item) " · ")))
+
+(defun harp-ui-document ()
+  "The surface data document: the current list page and its labels.
+Built beside every push (the chrome root's `:data-builder') from
+`harp-state-route' and the published snapshot, never from files; a
+filter change on the first page patches it (`harp--on-filter') instead
+of re-pushing the stack (SPEC 13.8.4)."
+  (let* ((profile (harp-ui-current))
+         (route harp-state-route)
+         (view (and profile (harp-ui-list-view-p route) (plist-get route :view)))
+         (items (and view (harp-ui-list-items view profile)))
+         (total (length items))
+         (page (min harp-state-page (max 0 (/ (1- total) harp-page-size))))
+         (start (* page harp-page-size))
+         (end (min total (+ start harp-page-size))))
+    (list :rows (vconcat (mapcar #'harp-ui-row (cl-subseq items start end)))
+          :filter_label (if harp-state-tag (concat "#" harp-state-tag " ×") "All tags")
+          :page_label (if (> total harp-page-size) (format "%d–%d / %d" (1+ start) end total) "")
+          :paging (if (> total harp-page-size) t :json-false))))
+
+(defun harp-ui-document-ops ()
+  "DataOps replacing every value `harp-ui-document' authors."
+  (let ((doc (harp-ui-document)))
+    (list (jetpacs-data-set "/rows" (plist-get doc :rows))
+          (jetpacs-data-set "/filter_label" (plist-get doc :filter_label))
+          (jetpacs-data-set "/page_label" (plist-get doc :page_label))
+          (jetpacs-data-set "/paging" (plist-get doc :paging)))))
+
+(defun harp-ui-record-template (kind)
+  "The record card as a row template over the document (SPEC 13.8.5).
+Every text binds a member of the item; the tap opens form KIND for the
+row whose key the Companion injects as `:item'."
+  (jetpacs-with-attrs
+   (jetpacs-card
+    (list (jetpacs-with-attrs (harp-ui-text (jetpacs-ref "title") "title") :key "title")
+          (jetpacs-with-attrs (harp-ui-text (jetpacs-ref "caption") "caption") :key "caption")
+          (jetpacs-with-attrs (harp-ui-text (jetpacs-ref "body")) :key "body")
+          (jetpacs-with-attrs (harp-ui-text (jetpacs-ref "tags") "caption") :key "tags")
+          (jetpacs-with-attrs (harp-ui-text (jetpacs-ref "files") "caption") :key "files"
+                              :visible_when (vector (jetpacs-when "files" "non_empty"))))
+    :on-tap (harp-action "harp.form" (list :form kind)))
+   :key (jetpacs-ref "id")))
+
+(defun harp-ui-template-page (kind)
+  "The bound record page for form KIND: rows, the empty note, paging.
+One column whose children are all keyed, so its conditional members sit
+among keyed siblings (SPEC 13.8.6); the paging buttons carry the pages
+beside `harp-state-page', so a later page is re-pushed, never patched."
+  (let ((page harp-state-page))
+    (jetpacs-column
+     (jetpacs-with-attrs
+      (jetpacs-column (jetpacs-template "/rows" (harp-ui-record-template kind)) :spacing 12)
+      :key "rows")
+     (jetpacs-with-attrs (harp-ui-text "No records to show.") :key "empty"
+                         :visible_when (vector (jetpacs-when "/rows" "empty")))
+     (jetpacs-with-attrs
+      (jetpacs-row (jetpacs-button "Previous" (harp-action "harp.page" (list :page (max 0 (1- page)))))
+                   (harp-ui-text (jetpacs-ref "/page_label") "caption")
+                   (jetpacs-button "Next" (harp-action "harp.page" (list :page (1+ page)))) :spacing 8)
+      :key "paging" :visible_when (vector (jetpacs-when "/paging" "eq" t)))
+     :spacing 12)))
 
 (defun harp-ui-metric (metric)
   "Render METRIC with a bounded chart and accessible reading labels."
@@ -198,15 +290,13 @@
        (append
         (list (harp-ui-text (alist-get 'name profile) "title")
               (jetpacs-row
-               (jetpacs-chip (if harp-state-tag (concat "#" harp-state-tag " ×") "All tags")
-                             :on-tap (harp-action "harp.filter"))
+               (jetpacs-chip (jetpacs-ref "/filter_label") :on-tap (harp-action "harp.filter"))
                (apply #'jetpacs-row
                       (append (mapcar (lambda (tag) (jetpacs-chip (concat "#" tag) :on-tap (harp-action "harp.filter" (list :tag tag))))
                                       (cl-subseq (harp-profile-tags profile) 0 (min 16 (length (harp-profile-tags profile))))) '(:scroll t))) :spacing 4))
         (pcase view
-          ("journal" (harp-ui-page (cl-remove-if-not #'harp-visible-p (apply #'append (mapcar (lambda (j) (alist-get 'entries j)) (alist-get 'journals profile))))
-                                    (lambda (item) (harp-ui-record item "entry"))))
-          ("documents" (harp-ui-page (cl-remove-if-not #'harp-visible-p (alist-get 'documents profile)) (lambda (item) (harp-ui-record item "document"))))
+          ("journal" (list (harp-ui-template-page "entry")))
+          ("documents" (list (harp-ui-template-page "document")))
           ("metrics" (harp-ui-page (cl-remove-if-not #'harp-visible-p (alist-get 'metrics profile)) #'harp-ui-metric))
           ("medications" (append (list (harp-ui-text "Due today" "title"))
                                   (harp-ui-page (plist-get harp-state :doses) #'harp-ui-dose)
