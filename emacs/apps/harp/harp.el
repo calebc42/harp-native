@@ -268,12 +268,11 @@ screen is re-pushed as before."
     :requires-extensions '("jetpacs.components" "jetpacs.design")) t)
 
 (defun harp-unregister ()
-  "Remove Harp's actions, chrome, presets, timers and private snapshot."
+  "Remove Harp's actions, chrome, presets, timers and private snapshot.
+`jetpacs-apps-unregister' sweeps everything attributed to the owner."
   (dolist (timer harp--timers) (when (timerp timer) (cancel-timer timer)))
   (setq harp--timers nil harp-state nil harp-ui--current-file nil harp-state-tag nil harp-state-page 0)
-  (dolist (name '("home" "open" "refresh" "profile" "form" "save" "delete" "dose" "refill" "reminder" "export" "filter" "page" "theme" "privacy"))
-    (jetpacs-undefaction (concat "harp." name)))
-  (jetpacs-apps-unregister "harp") (jetpacs-chrome-remove "harp")
+  (jetpacs-apps-unregister "harp")
   (dolist (id '("harp.light" "harp.dark")) (jetpacs-design-unregister-profile id)) t)
 
 ;;;###autoload
