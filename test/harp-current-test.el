@@ -2,6 +2,7 @@
 ;;; Code:
 (require 'ert)
 (require 'harp)
+(harp-register)  ; `require' only loads
 (require 'jetpacs-shell)
 (defconst harp-test-profile
   ":PROPERTIES:\n:ID: synthetic-example\n:HARP_TYPE: human\n:END:\n#+TITLE: Example Profile\n* Metadata\n** Sources\n** Metrics\n*** Example reading\n:PROPERTIES:\n:TAG_ID: sample\n:UNIT: units\n:HEALTHY_RANGE: 0-10\n:END:\n* Journals\n** Main\n*** Entry\n:PROPERTIES:\n:ID: example-entry\n:DATETIME: <2026-09-06 12:00>\n:END:\nSynthetic journal #sample(3).\n*** Entry\n:PROPERTIES:\n:ID: example-earlier-one\n:DATETIME: <2026-09-04 12:00>\n:END:\nSynthetic earlier reading #sample(2).\n*** Entry\n:PROPERTIES:\n:ID: example-earlier-two\n:DATETIME: <2026-09-05 10:00>\n:END:\nSynthetic earlier reading #sample(4).\n*** Entry\n:PROPERTIES:\n:ID: example-private\n:DATETIME: <2026-09-05 12:00>\n:PRIVATE: t\n:END:\nPRIVATE_SENTINEL #sample(99)\n* Documents\n** Example report\n:PROPERTIES:\n:ID: example-document\n:DATETIME: <2026-09-04 12:00>\n:SOURCE: Example source\n:FILES: example.pdf\n:END:\nSynthetic annotation.\n* Reminders\n** TODO Example reminder\nSCHEDULED: <2026-09-06 12:00>\n:PROPERTIES:\n:ID: example-reminder\n:END:\n* Medications\n** Example medication\n:PROPERTIES:\n:ID: example-med\n:UNIT: unit\n:STOCK: 10\n:REFILL: 5\n:ACTIVE: t\n:END:\n*** Schedule\n:PROPERTIES:\n:AMOUNT: 1\n:TIMES: 09:00, 20:00\n:END:\n"
@@ -222,6 +223,22 @@
                       (cl-find "chart" (append (plist-get (harp-ui-metric metric) :children) nil)
                                :key (lambda (node) (plist-get node :t)) :test #'equal)
                       :y_range))))))
+
+(ert-deftest harp-lifecycle-is-symmetric ()
+  "Loading harp.el registers nothing, and harp-unregister undoes
+everything harp-register did: the trusted launcher's two lifecycle
+checks, run from the foundation's applet tooling."
+  (require 'jetpacs-devtools)
+  (load (expand-file-name "../jetpacs-applet-mcp/jetpacs-applet-tooling.el"
+                          (file-name-directory
+                           (locate-library "jetpacs-surfaces")))
+        nil 'nomessage)
+  (should-not (jetpacs-applet-tooling-load-recording-registrations
+               (locate-library "harp.el" t)))
+  (let ((report (jetpacs-applet-tooling-check-lifecycle-symmetry "harp")))
+    (should (string-match-p "Status: SYMMETRIC" report))
+    (should (string-match-p "Registered on entry: yes" report)))
+  (should (assoc "harp" jetpacs-apps--registry)))
 
 (provide 'harp-current-test)
 ;;; harp-current-test.el ends here

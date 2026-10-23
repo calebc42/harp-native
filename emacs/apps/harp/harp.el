@@ -1,7 +1,8 @@
 ;;; harp.el --- Optional Harp Personal Health Record applet -*- lexical-binding: t; -*-
 ;; Package-Requires: ((emacs "30.1"))
 ;;; Commentary:
-;; Loading trusted applet code registers UI without reading health files.
+;; Loading trusted applet code registers nothing and reads no health files;
+;; the `harp' command or the Apps screen registers the UI.
 ;; Actions commit before acceptance; only presentation is deferred.
 ;;; Code:
 (require 'harp-ui)
@@ -283,6 +284,5 @@ screen is re-pushed as before."
 (defun harp-unload-function ()
   "Remove Harp registrations before feature unloading."
   (harp-unregister) nil)
-(harp-register)
 (provide 'harp)
 ;;; harp.el ends here

@@ -20,8 +20,9 @@ code. There is no nested Jetpacs submodule and no configured GitHub remote.
 - Public journal/document export as Org or HTML, saved below `harp-directory`.
 - Light/dark Foundation styles; optional packaged-app entry, inactive by default.
 
-`harp-directory` defaults to `~/harp/`. Loading the entrypoint only registers
-UI. The `harp` command explicitly reads that configured directory. The
+`harp-directory` defaults to `~/harp/`. Loading the entrypoint registers
+nothing; the `harp` command (or the app manager) registers the UI and
+explicitly reads that configured directory. The
 `harp-kmp` checkout and its profiles are never loaded automatically.
 
 The implemented workflows have been verified with synthetic records in Emacs
