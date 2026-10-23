@@ -28,9 +28,11 @@
   (find-file-noselect harp-ui--current-file))
 
 (defun harp-write--save (buffer)
-  "Save BUFFER synchronously and drop the read memo."
+  "Save BUFFER synchronously through the Org save policy; drop the memo.
+`ebp-org-file-save-function' is the one write path, so a host's
+pre-write transforms and after-save hooks see Harp's writes too."
   (with-current-buffer buffer
-    (let ((save-silently t)) (save-buffer)))
+    (funcall ebp-org-file-save-function buffer))
   (harp-ui-invalidate))
 
 (defun harp-write--stamp (date time)
