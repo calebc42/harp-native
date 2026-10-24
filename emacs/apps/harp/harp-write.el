@@ -142,20 +142,6 @@ the old bare-line regexp missed those and every save errored."
   (harp-write--insert-at-subtree-end)
   (insert text))
 
-(defun harp-write--replace-subtree (ref text)
-  "Replace the subtree resolved from REF with TEXT.  Return the buffer."
-  (let ((marker (harp--resolve-ref ref)))
-    (with-current-buffer (marker-buffer marker)
-      (org-with-wide-buffer
-       (goto-char marker)
-       (org-back-to-heading t)
-       (let ((beg (point))
-             (end (save-excursion (org-end-of-subtree t t))))
-         (delete-region beg end)
-         (goto-char beg)
-         (insert text))))
-    (marker-buffer marker)))
-
 (defun harp-write--update-in-place (ref title tags props body)
   "Update the heading at REF in place, preserving everything unmodeled.
 TITLE (nil = keep the current headline) sets the heading text; TAGS is the
