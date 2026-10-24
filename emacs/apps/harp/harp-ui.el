@@ -7,6 +7,7 @@
 (require 'harp-export)
 (require 'harp-design)
 (require 'jetpacs-chrome)
+(require 'jetpacs-widgets)
 (defvar harp-field-scope nil "Dynamic form identity namespace.")
 (defconst harp-form-schema
   '(("profile" (name "Name") (type "Profile type: human, cat, dog"))
@@ -29,9 +30,11 @@
 
 (defun harp-form-scope (route)
   "Return a bounded namespace for ROUTE's form kind and revision-bound identity."
-  (concat "harp-" (substring (secure-hash 'sha256
-                        (format "%s:%s" (plist-get route :form)
-                                (or (plist-get route :id) (plist-get route :revision) "new"))) 0 24)))
+  (jetpacs-opaque-id "harp-"
+                     (format "%s:%s" (plist-get route :form)
+                             (or (plist-get route :id) (plist-get route :revision)
+                                 "new"))
+                     24))
 
 (defun harp-field-id (name)
   "Return NAME's wire identity in the current form namespace."
