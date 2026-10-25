@@ -11,6 +11,13 @@
 (defvar harp-hide-private t "Whether private records are hidden from screens.")
 (defvar harp-state-tag nil "Current tag filter, or nil.")
 (defvar harp-state-page 0 "Current record page.")
+(defvar harp-state-journal 0 "Index of the journal the Journals tab shows.")
+(defvar harp-state-query "" "The filter bar's text search.")
+(defvar harp-state-filter-open nil "Non-nil while the filter bar shows the tag chips.")
+(defvar harp-state-sort "date_desc" "The Journals tab's order: date_desc or date_asc.")
+(defvar harp-state-sheet nil
+  "The entry form open in the bottom sheet: (:id TOKEN), TOKEN nil for a new entry.")
+(defvar harp-state-sheet-body nil "The entry form's text as last captured, or nil.")
 (defvar harp-state-route nil "The route last opened, as `harp--open' received it.")
 (defvar harp-state-epoch nil "Producer-minted process identity preventing token reuse after restart.")
 (defvar harp-state-generation 0 "Monotonic process-local snapshot generation.")

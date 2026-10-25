@@ -212,11 +212,10 @@
 (ert-deftest harp-current-selected-destination-and-plot-range ()
   (harp-test-with-snapshot
     (let* ((metric (car (alist-get 'metrics (harp-ui-current))))
-           (navigation (harp-ui-nav "metrics"))
-           (selected (cl-remove-if-not (lambda (node) (eq t (plist-get node :selected)))
-                                       (append (plist-get navigation :children) nil))))
-      (should (= 1 (length selected)))
-      (should (equal "Metrics" (plist-get (car selected) :label)))
+           (navigation (jetpacs-node->canonical-json (harp-ui-nav "metrics"))))
+      ;; One selected item: its indicator and label wear the selected styles.
+      (should (= 1 (cl-count-if (lambda (_) t) (split-string navigation "harp.nav-indicator-on") :start 1)))
+      (should (string-match-p "harp.t.nav-selected\"\\]\\(?:,\"children\":\\[\\)?.*Metrics" navigation))
       (setf (alist-get 'range metric) '(0 . 10))
       (should (equal [0 10]
                      (plist-get
@@ -243,49 +242,29 @@ checks, run from the foundation's applet tooling."
 (provide 'harp-current-test)
 ;;; harp-current-test.el ends here
 
-(ert-deftest harp-current-list-page-is-bound-to-the-document ()
-  "The journal page is one row template over `/rows'; the document carries
-the visible page, and a first-page filter patches it instead of
-re-pushing (PLAN-responsiveness A1a)."
+(ert-deftest harp-current-journal-cards-follow-harp ()
+  "The Journals tab is upstream Harp's: a selector card, the count, and an
+elevated card per visible entry with its date stamp and a paragraph whose
+tags, metrics and attachments ride inline; private entries stay out, and
+a tag filter re-presents the screen."
   (harp-test-with-snapshot
-    (let ((harp-state-route '(:view "journal")))
-      (let* ((doc (harp-ui-document)) (rows (plist-get doc :rows)))
-        ;; Three public entries; the private one stays out.
-        (should (= 3 (length rows)))
-        (should (cl-every (lambda (r) (and (stringp (plist-get r :id))
-                                           (stringp (plist-get r :title))))
-                          rows))
-        (should (equal "All tags" (plist-get doc :filter_label)))
-        (should (eq :json-false (plist-get doc :paging)))
-        (should (equal "" (plist-get doc :page_label))))
-      (let ((json (jetpacs-node->canonical-json (harp-ui-screen '(:view "journal")))))
-        (should (string-match-p "\"template\"" json))
-        (should (string-match-p "\"bind\":{\"children\":\"/rows\"}" json))
-        (should (string-match-p "/filter_label" json))
-        (should-not (string-match-p "Synthetic journal" json)))
-      ;; Without the Companion's data model the shell expands the page here.
-      (let* ((expanded (jetpacs-data-materialize (harp-ui-screen '(:view "journal"))
-                                                 (harp-ui-document) :strip t))
-             (json (jetpacs-node->canonical-json expanded)))
-        (should (string-match-p "Synthetic journal" json))
-        (should-not (string-match-p "PRIVATE_SENTINEL" json))
-        (jetpacs-shell--gate-ids expanded nil))
-      ;; A tag filter on the first page: one patch of the document.
-      (let ((patched nil) (pushed 0) (tag "sample"))
-        (cl-letf (((symbol-function 'jetpacs-app-defer-patch)
-                   (lambda (ops _params) (setq patched ops)))
-                  ((symbol-function 'jetpacs-shell-push)
-                   (lambda (&rest _) (cl-incf pushed)))
-                  ((symbol-function 'harp-profile-tags)
-                   (lambda (_profile) (list tag))))
-          (should (eq 'accepted (harp--on-filter (list :tag tag) '(:surface "app:harp"))))
-          (should patched)
-          (should (= 0 pushed))
-          (should (equal harp-state-tag tag))
-          (let ((label (cl-find-if (lambda (op) (equal (plist-get op :path) "/filter_label")) patched)))
-            (should (equal (plist-get label :value) (concat "#" tag " ×"))))
-          ;; From a later page the buttons' arguments change: re-push.
-          (setq harp-state-page 1 patched nil)
-          (should (eq 'accepted (harp--on-filter nil '(:surface "app:harp"))))
-          (should-not patched)
-          (should (= 0 harp-state-page)))))))
+    (let* ((harp-state-route '(:view "journal"))
+           (json (jetpacs-node->canonical-json (harp-ui-screen '(:view "journal")))))
+      (should (string-match-p "Selected Journal" json))
+      (should (string-match-p "\"jetpacs.inline_text\"" json))
+      (should (string-match-p "harp.stamp" json))
+      (should (string-match-p "Synthetic journal" json))
+      (should-not (string-match-p "PRIVATE_SENTINEL" json))
+      (jetpacs-shell--gate-ids (harp-ui-screen '(:view "journal")) nil))
+    (should (equal (harp-ui-body-items "Walk #fitness #weight(63.8) and [[attachment:a.pdf]]")
+                   '("Walk " (tag "fitness") " " (metric "weight" "63.8") " and " (attach "a.pdf"))))
+    (should (equal (harp-ui-body-items "issue#3 stays") '("issue#3 stays")))
+    (let ((pushed 0) (tag "sample") (harp-state-route '(:view "journal")))
+      (cl-letf (((symbol-function 'jetpacs-shell-push) (lambda (&rest _) (cl-incf pushed)))
+                ((symbol-function 'harp--later) (lambda (fn) (funcall fn)))
+                ((symbol-function 'harp-profile-tags) (lambda (_profile) (list tag))))
+        (should (eq 'accepted (harp--on-filter (list :tag tag) '(:surface "app:harp"))))
+        (should (equal harp-state-tag tag))
+        (should (= 1 pushed))
+        (should (eq 'accepted (harp--on-filter nil '(:surface "app:harp"))))
+        (should-not harp-state-tag)))))

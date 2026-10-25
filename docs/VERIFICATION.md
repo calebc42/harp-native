@@ -57,3 +57,34 @@ Temporary packages `com.calebc42.jetpacs.companion` and its `.test` package
 were absent before testing and removed afterward. The existing `dev.jetpacs`
 installation was preserved. No sources were compiled to `.elc` in the applet
 source directory. No commits or pushes were made.
+
+## Upstream Harp look, 2026-10-25
+
+The Home and Journals screens were rebuilt against upstream Harp 1.6.16
+(F-Droid, Material 3 dynamic colors) on the Pixel Tablet in light mode, the
+two apps side by side in split screen so both panes are the same 635x800 dp
+window, each loading the synthetic `aisha-khan-human` profile from
+upstream's `assets/test-profiles`:
+
+| Screen | Result |
+|---|---|
+| Home | Logo, title, settings and about, "Recent profiles", the profile card's icon and name on Harp's pixels; Open and Create within 2 px |
+| Journals | 1.24% of pixels differ, about 7,300 of them the status and gesture bars; every row (filter bar, selector card, entry cards, date stamps, inline tag, metric and attachment chips, navigation bar) on Harp's rows |
+| Entry form | Opens in Material's bottom sheet with Harp's title, text field, tag suggestions, attachment buttons, time, date, Cancel and Save |
+
+Known differences: the entry menu shows Material's three dots, not Font
+Awesome's ellipsis; card shadows fall the other way because Android lights
+them from the screen's top centre and the panes sit either side of it; the
+entry form's text fields keep Foundation's label above the outline instead of
+Material's notched floating label, and the time and date are typed rather
+than picked; Metrics and Documents keep the earlier generic cards; the dark
+palette is the same seed's dark scheme, not yet measured.
+
+Font Awesome Free 5.15.4 icons (CC BY 4.0) are drawn from their SVG path
+data through `jetpacs.glyph`; Harp's logo is its `logo.png` traced to a path.
+
+Gates: Harp ERT 24 passed with Checkdoc and warning-free compilation;
+Companion `testDebugUnitTest`, `testAndroidHostTest` and `jvmTest`; the full
+jetpacs-poc runner; Orgzly ERT 90.
+
+Remaining differences are listed in [UPSTREAM-GAPS.md](UPSTREAM-GAPS.md).

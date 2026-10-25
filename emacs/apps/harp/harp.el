@@ -225,7 +225,10 @@ screen is re-pushed as before."
     (if (or (null tag) (member tag (harp-profile-tags (harp-ui-current))))
         (let ((first-page (zerop harp-state-page)))
           (setq harp-state-tag tag harp-state-page 0)
-          (if (and first-page (harp-ui-list-view-p harp-state-route))
+          ;; Clear filters clears the text search too.
+          (unless tag (setq harp-state-query ""))
+          (if (and first-page (harp-ui-list-view-p harp-state-route)
+                   (not (equal (plist-get harp-state-route :view) "journal")))
               (jetpacs-app-defer-patch (harp-ui-document-ops) params)
             (harp--later (lambda () (jetpacs-shell-push "harp"))))
           'accepted)
@@ -235,6 +238,113 @@ screen is re-pushed as before."
   (let ((page (plist-get args :page)))
     (if (and (integerp page) (<= 0 page 100))
         (progn (setq harp-state-page page) (harp--later (lambda () (jetpacs-shell-push "harp"))) 'accepted) 'rejected)))
+(defun harp--push-later ()
+  "Re-present Harp's surface after this action."
+  (harp--later (lambda () (jetpacs-shell-push "harp"))))
+
+(defun harp--on-filter-open (_args _params)
+  "Show or hide the filter bar's tag chips."
+  (setq harp-state-filter-open (not harp-state-filter-open))
+  (harp--push-later)
+  'accepted)
+
+(defun harp--on-search (_args params)
+  "Filter the entries by the filter bar's text search captured in PARAMS."
+  (let* ((harp-field-scope (harp-form-scope harp-state-route))
+         (query (plist-get (plist-get params :fields) (intern (concat ":" (harp-field-id "query"))))))
+    (if (not (and (stringp query) (<= (length query) 256))) 'rejected
+      (setq harp-state-query query)
+      (harp--push-later)
+      'accepted)))
+
+(defun harp--on-sort (_args _params)
+  "Flip the Journals tab between newest and oldest first."
+  (setq harp-state-sort (if (equal harp-state-sort "date_asc") "date_desc" "date_asc"))
+  (harp--push-later)
+  'accepted)
+
+(defun harp--on-journal (_args _params)
+  "Show the profile's next journal."
+  (let ((count (length (alist-get 'journals (harp-ui-current)))))
+    (setq harp-state-journal (if (> count 0) (% (1+ harp-state-journal) count) 0))
+    (harp--push-later)
+    'accepted))
+
+(defun harp--sheet-field (params name)
+  "The entry sheet's captured field NAME from PARAMS, or nil."
+  (let ((harp-field-scope "harp-entry-sheet"))
+    (plist-get (plist-get params :fields) (intern (concat ":" (harp-field-id name))))))
+
+(defun harp--on-sheet (args _params)
+  "Open the entry form sheet, for ARGS' entry `:id' or a new one."
+  (let ((token (plist-get args :id)))
+    (if (and token (not (assoc token (plist-get harp-state :refs)))) 'stale
+      (setq harp-state-sheet (list :id token) harp-state-sheet-body nil)
+      (harp--push-later)
+      'accepted)))
+
+(defun harp--on-sheet-close (_args _params)
+  "Dismiss the entry form sheet."
+  (setq harp-state-sheet nil harp-state-sheet-body nil)
+  (harp--push-later)
+  'accepted)
+
+(defun harp--on-sheet-body (_args params)
+  "Remember the entry form's text from PARAMS, so its error state follows it."
+  (let ((body (harp--sheet-field params "body")))
+    (if (not (and (stringp body) (<= (string-bytes body) 16000))) 'rejected
+      (let ((was-blank (string-blank-p (or harp-state-sheet-body ""))))
+        (setq harp-state-sheet-body body)
+        (unless (eq was-blank (string-blank-p body)) (harp--push-later)))
+      'accepted)))
+
+(defun harp--on-sheet-tag (args params)
+  "Insert or remove ARGS' `:tag' in the entry form's text captured in PARAMS."
+  (let ((tag (plist-get args :tag)) (body (or (harp--sheet-field params "body") "")))
+    (if (not (and (stringp tag) (member tag (harp-profile-tags (harp-ui-current))))) 'rejected
+      (setq harp-state-sheet-body
+            (if (harp-ui-text-has-tag body tag)
+                (string-trim (replace-regexp-in-string
+                              (concat "[[:space:]]*#" (regexp-quote tag) "\\b") "" body))
+              (concat (string-trim-right body) (if (string-blank-p body) "" " ") "#" tag " ")))
+      (harp--later (lambda ()
+                     (jetpacs-shell-push "harp" :reset-input-ids
+                                         (let ((harp-field-scope "harp-entry-sheet"))
+                                           (list (harp-field-id "body"))))))
+      'accepted)))
+
+(defun harp--on-sheet-attach (_args _params)
+  "Attachments need the Companion's file and camera pickers, not yet offered."
+  (message "Harp: attachments are not available yet")
+  'rejected)
+
+(defun harp--on-sheet-save (args params)
+  "Save the entry form's captured PARAMS as ARGS' entry or a new one."
+  (harp--guard
+   (lambda ()
+     (let* ((token (plist-get args :id))
+            (ref (and token (harp-resolve token "entry" t)))
+            (item (plist-get ref :item))
+            (body (harp--sheet-field params "body"))
+            (time (harp--sheet-field params "time"))
+            (date (harp--sheet-field params "date"))
+            (journals (alist-get 'journals (harp-ui-current)))
+            (journal (nth (min harp-state-journal (max 0 (1- (length journals)))) journals)))
+       (unless (equal (plist-get args :revision) (plist-get harp-state :revision)) (signal 'harp-stale nil))
+       (unless (and (stringp body) (not (string-blank-p body)) (<= (string-bytes body) 16000)
+                    (not (string-match-p "[\0\r]" body)))
+         (error "Text can't be empty"))
+       (unless (and (stringp time) (string-match-p "\\`\\(?:[01][0-9]\\|2[0-3]\\):[0-5][0-9]\\'" time))
+         (error "Invalid time"))
+       (unless (and (stringp date) (harp--valid-date date)) (error "Invalid date"))
+       (harp--transaction
+        (lambda ()
+          (if ref (harp-write-update-entry (alist-get 'ref item) date time (alist-get 'heading-tags item)
+                                           (alist-get 'private item) body)
+            (harp-write-add-entry (alist-get 'name journal) date time nil nil body))))
+       (setq harp-state-sheet nil harp-state-sheet-body nil)
+       (harp--committed "journal")))))
+
 (defun harp--on-theme (_args _params)
   "Toggle the explicit Harp appearance state."
   (setq harp-state-dark (not harp-state-dark)) (harp--later (lambda () (jetpacs-shell-push "harp"))) 'accepted)
@@ -261,10 +371,20 @@ screen is re-pushed as before."
     (jetpacs-defaction "harp.export" #'harp--on-export :doc "Save public journal and document records as Org or HTML" :args '((:name format :type "enum" :required t)))
     (jetpacs-defaction "harp.filter" #'harp--on-filter :doc "Set or clear the tag filter" :args '((:name tag :type "text")))
     (jetpacs-defaction "harp.page" #'harp--on-page :doc "Show a bounded record page" :args '((:name page :type "number" :required t)))
+    (jetpacs-defaction "harp.sheet" #'harp--on-sheet :doc "Open the entry form sheet for an entry or a new one" :args '((:name id :type "ref")))
+    (jetpacs-defaction "harp.sheet-close" #'harp--on-sheet-close :doc "Dismiss the entry form sheet")
+    (jetpacs-defaction "harp.sheet-body" #'harp--on-sheet-body :doc "Remember the entry form's captured text")
+    (jetpacs-defaction "harp.sheet-tag" #'harp--on-sheet-tag :doc "Insert or remove a tag in the entry form's text" :args '((:name tag :type "string" :required t)))
+    (jetpacs-defaction "harp.sheet-attach" #'harp--on-sheet-attach :doc "Attach a photo or file to the entry (not yet available)")
+    (jetpacs-defaction "harp.sheet-save" #'harp--on-sheet-save :doc "Save the entry form" :args '((:name id :type "ref") (:name revision :type "string")))
+    (jetpacs-defaction "harp.filter-open" #'harp--on-filter-open :doc "Show or hide the filter bar's tag chips")
+    (jetpacs-defaction "harp.search" #'harp--on-search :doc "Filter the entries by the captured text search")
+    (jetpacs-defaction "harp.sort" #'harp--on-sort :doc "Flip the Journals tab between newest and oldest first")
+    (jetpacs-defaction "harp.journal" #'harp--on-journal :doc "Show the profile's next journal")
     (jetpacs-defaction "harp.theme" #'harp--on-theme :doc "Toggle Harp light and dark appearance")
     (jetpacs-defaction "harp.privacy" #'harp--on-privacy :doc "Toggle private-record visibility")
 )
-  (jetpacs-defapp "harp" :label "Harp" :icon "favorite" :surfaces '("harp") :chrome 'primary :dock-core nil
+  (jetpacs-defapp "harp" :label "Harp" :icon "favorite" :surfaces '("harp") :chrome 'standalone
     :home-route "profiles" :order 47 :destinations '((:key "profiles" :label "Profiles" :icon "favorite" :verb "harp.home"))
     :requires-extensions '("jetpacs.components" "jetpacs.design")) t)
 
